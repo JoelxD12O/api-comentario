@@ -3,14 +3,18 @@ service: api-comentario
 
 provider:
   name: aws
-  runtime: python3.13	
-  # Default memory size for functions (default: 1024MB)
+  runtime: python3.13
   memorySize: 1024
   timeout: 20
+
+  # Si tu lab te obliga a usar LabRole, lo dejamos.
   iam:
-    role: arn:aws:iam::791880057952:role/LabRole	
+    role: arn:aws:iam::791880057952:role/LabRole
+
   environment:
     TABLE_NAME: ${sls:stage}-t_comentarios
+    # Nombre único por cuenta/región/stage (evita choques globales de S3)
+    INGEST_BUCKET: ${self:service}-${sls:stage}-${aws:accountId}-ingesta
 
 functions:
   crear:
@@ -24,6 +28,8 @@ functions:
 
 resources:
   Resources:
+
+    # ---------- DynamoDB ----------
     TablaComentarios:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -38,5 +44,35 @@ resources:
             KeyType: HASH
           - AttributeName: uuid
             KeyType: RANGE
-        # Set the capacity to auto-scale
         BillingMode: PAY_PER_REQUEST
+
+    # ---------- S3: Bucket de ingesta por stage ----------
+    IngestBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.INGEST_BUCKET}
+        BlockPublicAccess:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        VersioningConfiguration:
+          Status: Suspended
+      DeletionPolicy: Retain
+
+    # ---------- S3 Bucket Policy: conceder PutObject al LabRole ----------
+    IngestBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref IngestBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowLabRolePut
+              Effect: Allow
+              Principal:
+                AWS: arn:aws:iam::791880057952:role/LabRole
+              Action:
+                - s3:PutObject
+              Resource:
+                - arn:aws:s3:::${self:provider.environment.INGEST_BUCKET}/*
