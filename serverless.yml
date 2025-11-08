@@ -6,15 +6,12 @@ provider:
   runtime: python3.13
   memorySize: 1024
   timeout: 20
-
-  # Si tu lab te obliga a usar LabRole, lo dejamos.
   iam:
     role: arn:aws:iam::791880057952:role/LabRole
-
   environment:
     TABLE_NAME: ${sls:stage}-t_comentarios
-    # Nombre único por cuenta/región/stage (evita choques globales de S3)
     INGEST_BUCKET: ${self:service}-${sls:stage}-${aws:accountId}-ingesta
+    STAGE: ${sls:stage}
 
 functions:
   crear:
@@ -51,7 +48,7 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:provider.environment.INGEST_BUCKET}
-        BlockPublicAccess:
+        PublicAccessBlockConfiguration:
           BlockPublicAcls: true
           BlockPublicPolicy: true
           IgnorePublicAcls: true
@@ -60,7 +57,7 @@ resources:
           Status: Suspended
       DeletionPolicy: Retain
 
-    # ---------- S3 Bucket Policy: conceder PutObject al LabRole ----------
+    # ---------- S3 Bucket Policy: permitir PutObject al LabRole ----------
     IngestBucketPolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
